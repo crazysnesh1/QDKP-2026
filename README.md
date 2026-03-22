@@ -1,5 +1,5 @@
 <div align="center">
-<font size=”15″>QDKPv2 - За основу взял русифицированную версию @Joneil7</font>
+<font size=”20″>QDKPv2 - За основу взял русифицированную версию @Joneil7</font>
 </div>
 
 - Добавил:

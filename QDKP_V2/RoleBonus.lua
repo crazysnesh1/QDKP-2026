@@ -1,26 +1,25 @@
 -- Copyright 2010 Riccardo Belloli (belloli@email.it)
 -- This file is a part of QDKP_V2 (see about.txt in the Addon's root folder)
 
---             ## СИСТЕМА БОНУСОВ ЗА РОЛИ ##
---             Бонусные награды за БИС/ТАНК/ХИЛ роли
+--             ## СИСТЕМА РОЛЕЙ И БОНУСОВ ЗА РОЛИ ##
 --
 
 -- Таблица перевода имен боссов для системы бонусов за роли
 local role_boss_translator = {
     -- Icecrown Citadel (ЦЛК)
---    ["Лорд Ребрад"] = "Lord Marrowgar",
---    ["Леди Смертный Шепот"] = "Lady Deathwhisper",
---    ["Бой на кораблях"] = "Icecrown Gunship Battle",
---    ["Завоеватель Дракономор"] = "Icecrown Gunship Battle", -- альтернативный перевод
---    ["Саурфанг Смертоносный"] = "Deathbringer Saurfang",
---    ["Трухлявый"] = "Festergut",
---    ["Гниломорд"] = "Rotface",
---    ["Профессор Мерзоцид"] = "Professor Putricide",
---    ["Принц Валанар"] = "Prince Valanar",
---    ["Кровавая королева Лана'тель"] = "Blood-Queen Lana'thel",
---    ["Валитрия Сноходица"] = "Valithria Dreamwalker",
---    ["Синдрагоса"] = "Sindragosa",
---   ["Король-лич"] = "The Lich King",
+    ["Лорд Ребрад"] = "Lord Marrowgar",
+    ["Леди Смертный Шепот"] = "Lady Deathwhisper",
+    ["Бой на кораблях"] = "Icecrown Gunship Battle",
+    ["Завоеватель Дракономор"] = "Icecrown Gunship Battle",
+    ["Саурфанг Смертоносный"] = "Deathbringer Saurfang",
+    ["Трухлявый"] = "Festergut",
+    ["Гниломорд"] = "Rotface",
+    ["Профессор Мерзоцид"] = "Professor Putricide",
+    ["Принц Валанар"] = "Prince Valanar",
+    ["Кровавая королева Лана'тель"] = "Blood-Queen Lana'thel",
+    ["Валитрия Сноходица"] = "Valithria Dreamwalker",
+    ["Синдрагоса"] = "Sindragosa",
+    ["Король-лич"] = "The Lich King",
     
     -- Ruby Sanctum (РС)
     ["Халион"] = "Halion",
@@ -31,10 +30,9 @@ local role_boss_translator = {
     ["Лорд Джараксус"] = "Lord Jaraxxus",
     ["Чемпионы фракций"] = "Faction Champions",
     ["Валь'киры-близнецы"] = "The Twin Val'kyr",
-    ["Эйдис Погибель Тьмы"] = "The Twin Val'kyr", -- одна из близнецов
-    ["Фьола Погибель Света"] = "The Twin Val'kyr", -- вторая из близнецов
-	["Эйдис Погибель Тьмы"] = "Eydis Darkbane",
-	["Эйдис, Погибель Тьмы"] = "Eydis Darkbane",
+    ["Эйдис Погибель Тьмы"] = "Eydis Darkbane",
+    ["Эйдис, Погибель Тьмы"] = "Eydis Darkbane",
+    ["Фьола Погибель Света"] = "Fjola Lightbane",
     ["Ануб'арак"] = "Anub'arak"
 }
 
@@ -44,10 +42,8 @@ local function NormalizeBossName(bossName)
         return bossName
     end
     
-    -- Сначала проверяем локальную таблицу переводов
     local normalized = role_boss_translator[bossName] or bossName
     
-    -- Затем используем библиотеку LibBabble если доступна
     if QDKP2bossEnglish then
         normalized = QDKP2bossEnglish[normalized] or normalized
     end
@@ -55,6 +51,391 @@ local function NormalizeBossName(bossName)
     QDKP2_Debug(3, "RoleBonus", "Нормализация имени босса: '" .. bossName .. "' -> '" .. normalized .. "'")
     return normalized
 end
+
+-- ==================== СИСТЕМА РОЛЕЙ ====================
+
+-- Глобальная таблица для хранения ролей игроков
+QDKP2_RolesDB = QDKP2_RolesDB or {}
+
+-- Структура ролей
+QDKP2_RoleConfig = {
+    -- Автоматические роли (из талантов)
+    AUTO = {
+        TANK = {
+            name = "Танк",
+            displayName = "Танк",
+            color = { r = 0, g = 0.5, b = 1 },
+            priority = 5
+        },
+        HEAL = {
+            name = "Хил",
+            displayName = "Хил",
+            color = { r = 0, g = 1, b = 0 },
+            priority = 6
+        },
+        DD = {
+            name = "Дпс",
+            displayName = "Дпс",
+            color = { r = 1, g = 0.3, b = 0.3 },
+            priority = 9
+        }
+    },
+    
+    -- Ручные роли (BIS)
+    MANUAL = {
+        BIS = {
+            name = "Бис",
+            displayName = "Бис",
+            color = { r = 1, g = 0.84, b = 0 },
+            priority = 8
+        }
+    },
+    
+    -- Комбинированные роли для отображения
+    DISPLAY = {
+        BIS_TANK = {
+            name = "Бис Танк",
+            displayName = "Бис Танк",
+            color = { r = 0, g = 0.2, b = 0.6 },
+            priority = 3
+        },
+        BIS_HEAL = {
+            name = "Бис Хил",
+            displayName = "Бис Хил",
+            color = { r = 0, g = 0.5, b = 0 },
+            priority = 4
+        },
+        BIS_DD = {
+            name = "Бис Дпс",
+            displayName = "Бис Дпс",
+            color = { r = 0.6, g = 0, b = 0 },
+            priority = 7
+        },
+        BIS = {
+            name = "Бис",
+            displayName = "Бис",
+            color = { r = 1, g = 0.84, b = 0 },
+            priority = 8
+        },
+        TANK = {
+            name = "Танк",
+            displayName = "Танк",
+            color = { r = 0, g = 0.5, b = 1 },
+            priority = 5
+        },
+        HEAL = {
+            name = "Хил",
+            displayName = "Хил",
+            color = { r = 0, g = 1, b = 0 },
+            priority = 6
+        },
+        DD = {
+            name = "Дпс",
+            displayName = "Дпс",
+            color = { r = 1, g = 0.3, b = 0.3 },
+            priority = 9
+        }
+    },
+    
+    -- Бонусные роли (для начисления бонусов)
+    BONUS = {
+        BIS_TANK_HEAL = {
+            name = "БИС ТАНК/ХИЛ",
+            priority = 1
+        },
+        TANK_HEAL = {
+            name = "ТАНК/ХИЛ",
+            priority = 2
+        },
+        BIS = {
+            name = "БИС",
+            priority = 3
+        }
+    }
+}
+
+-- Хранилище ролей игроков
+QDKP2_PlayerAutoRoles = {}      -- автоматические роли (из талантов)
+QDKP2_PlayerManualRoles = {}    -- ручные роли (BIS)
+
+-- ==================== ФУНКЦИИ УПРАВЛЕНИЯ РОЛЯМИ ====================
+
+function QDKP2_GetAutoRole(playerName)
+    return QDKP2_PlayerAutoRoles[playerName]
+end
+
+function QDKP2_SetAutoRole(playerName, role)
+    if role then
+        QDKP2_PlayerAutoRoles[playerName] = role
+    else
+        QDKP2_PlayerAutoRoles[playerName] = nil
+    end
+end
+
+function QDKP2_GetManualRole(playerName)
+    return QDKP2_PlayerManualRoles[playerName]
+end
+
+function QDKP2_SetManualRole(playerName, role)
+    if role and role == "BIS" then
+        QDKP2_PlayerManualRoles[playerName] = role
+    else
+        QDKP2_PlayerManualRoles[playerName] = nil
+    end
+end
+
+function QDKP2_ClearManualRole(playerName)
+    QDKP2_PlayerManualRoles[playerName] = nil
+end
+
+function QDKP2_SetManualRolesForPlayers(players, role)
+    if not players or #players == 0 then return end
+    
+    for _, playerName in ipairs(players) do
+        if role == "NONE" then
+            QDKP2_ClearManualRole(playerName)
+        else
+            QDKP2_SetManualRole(playerName, role)
+        end
+    end
+    
+    QDKP2_SaveRoles()
+    QDKP2_RefreshAll()
+end
+
+function QDKP2_ResetAllRoles()
+    table.wipe(QDKP2_PlayerManualRoles)
+    QDKP2_SaveRoles()
+    QDKP2_RefreshAll()
+end
+
+-- Получение отображаемой роли игрока
+function QDKP2_GetPlayerDisplayRole(playerName)
+    local autoRole = QDKP2_PlayerAutoRoles[playerName]
+    local manualRole = QDKP2_PlayerManualRoles[playerName]
+    
+    if manualRole == "BIS" then
+        if autoRole == "TANK" then
+            return "BIS_TANK"
+        elseif autoRole == "HEAL" then
+            return "BIS_HEAL"
+        elseif autoRole == "DD" then
+            return "BIS_DD"
+        else
+            return "BIS"
+        end
+    elseif autoRole then
+        return autoRole
+    end
+    
+    return nil
+end
+
+-- Получение названия роли для отображения
+function QDKP2_GetPlayerRoleDisplayName(playerName)
+    local roleKey = QDKP2_GetPlayerDisplayRole(playerName)
+    if roleKey and QDKP2_RoleConfig.DISPLAY[roleKey] then
+        return QDKP2_RoleConfig.DISPLAY[roleKey].displayName
+    end
+    return ""
+end
+
+-- Получение цвета роли
+function QDKP2_GetPlayerRoleColor(playerName)
+    local roleKey = QDKP2_GetPlayerDisplayRole(playerName)
+    if roleKey and QDKP2_RoleConfig.DISPLAY[roleKey] then
+        local color = QDKP2_RoleConfig.DISPLAY[roleKey].color
+        return { r = color.r, g = color.g, b = color.b }
+    end
+    return { r = 1, g = 1, b = 1 }
+end
+
+-- Получение бонусной роли (для начисления бонусов)
+function QDKP2_GetBonusRole(playerName)
+    local autoRole = QDKP2_PlayerAutoRoles[playerName]
+    local manualRole = QDKP2_PlayerManualRoles[playerName]
+    
+    if not autoRole and not manualRole then
+        return nil
+    end
+    
+    if manualRole == "BIS" then
+        if autoRole == "TANK" or autoRole == "HEAL" then
+            return "BIS_TANK_HEAL"
+        elseif autoRole == "DD" then
+            return "BIS"
+        else
+            return "BIS"
+        end
+    elseif autoRole == "TANK" or autoRole == "HEAL" then
+        return "TANK_HEAL"
+    end
+    
+    return nil
+end
+
+-- Получение приоритета роли для сортировки
+function QDKP2_GetRolePriority(playerName)
+    local roleKey = QDKP2_GetPlayerDisplayRole(playerName)
+    if roleKey and QDKP2_RoleConfig.DISPLAY[roleKey] then
+        return QDKP2_RoleConfig.DISPLAY[roleKey].priority
+    end
+    return 99
+end
+
+-- ==================== СОХРАНЕНИЕ РОЛЕЙ ====================
+
+function QDKP2_SaveRoles()
+    QDKP2_RolesDB = QDKP2_RolesDB or {}
+    
+    -- Сохраняем ручные роли
+    for playerName, role in pairs(QDKP2_PlayerManualRoles) do
+        QDKP2_RolesDB[playerName] = role
+    end
+    
+    -- Удаляем записи для игроков без ручных ролей
+    for playerName, _ in pairs(QDKP2_RolesDB) do
+        if not QDKP2_PlayerManualRoles[playerName] then
+            QDKP2_RolesDB[playerName] = nil
+        end
+    end
+    
+    QDKP2_Debug(2, "Roles", "Роли сохранены. Ручных записей: " .. tostring(QDKP2_CountManualRoles()))
+end
+
+function QDKP2_LoadRoles()
+    if not QDKP2_RolesDB then
+        QDKP2_RolesDB = {}
+        QDKP2_Debug(2, "Roles", "База данных ролей инициализирована")
+        return
+    end
+    
+    QDKP2_PlayerManualRoles = {}
+    for playerName, role in pairs(QDKP2_RolesDB) do
+        if role == "BIS" then
+            QDKP2_PlayerManualRoles[playerName] = role
+        end
+    end
+    
+    QDKP2_Debug(2, "Roles", "Роли загружены. Ручных записей: " .. tostring(QDKP2_CountManualRoles()))
+end
+
+function QDKP2_CountManualRoles()
+    local count = 0
+    if QDKP2_PlayerManualRoles then
+        for _ in pairs(QDKP2_PlayerManualRoles) do
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function QDKP2_ResetRolesOnSessionClose()
+    local roleCount = 0
+    
+    if QDKP2_PlayerManualRoles then
+        for _ in pairs(QDKP2_PlayerManualRoles) do
+            roleCount = roleCount + 1
+        end
+        table.wipe(QDKP2_PlayerManualRoles)
+    end
+    
+    if QDKP2_RolesDB then
+        table.wipe(QDKP2_RolesDB)
+    end
+    
+    if roleCount > 0 then
+        QDKP2_Debug(2, "Roles", "Роли сброшены при закрытии сессии. Сброшено: " .. roleCount .. " ролей")
+    end
+    
+    return roleCount > 0
+end
+
+-- ==================== АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ РОЛЕЙ (LibGroupTalents) ====================
+
+local function ConvertGTToQDKPRole(gtRole)
+    if gtRole == "tank" then
+        return "TANK"
+    elseif gtRole == "healer" then
+        return "HEAL"
+    else
+        return "DD"
+    end
+end
+
+function QDKP2_UpdateUnitRole(unit)
+    if not unit or not UnitExists(unit) then return end
+
+    local name = UnitName(unit)
+    if not name then return end
+
+    local lib = LibStub:GetLibrary("LibGroupTalents-1.0", true)
+    if not lib then return end
+
+    local gtRole = lib:GetUnitRole(unit)
+    if not gtRole then return end
+
+    QDKP2_SetAutoRole(name, ConvertGTToQDKPRole(gtRole))
+end
+
+function QDKP2_ScanRaidRoles()
+    local num = GetNumRaidMembers()
+    for i = 1, num do
+        QDKP2_UpdateUnitRole("raid" .. i)
+    end
+end
+
+function QDKP2_InitTalentRoleSystem()
+    local lib = LibStub:GetLibrary("LibGroupTalents-1.0", true)
+    if not lib then
+        QDKP2_Debug(1, "Roles", "LibGroupTalents не найден")
+        return
+    end
+
+    lib.RegisterCallback(QDKP2_RoleCallbacks, "LibGroupTalents_RoleChange")
+    lib.RegisterCallback(QDKP2_RoleCallbacks, "LibGroupTalents_Update")
+end
+
+-- Callback обработчик для LibGroupTalents
+QDKP2_RoleCallbacks = {}
+function QDKP2_RoleCallbacks:LibGroupTalents_RoleChange(event, guid, unit)
+    QDKP2_UpdateUnitRole(unit)
+    QDKP2_RefreshAll()
+end
+
+function QDKP2_RoleCallbacks:LibGroupTalents_Update(event, guid, unit)
+    QDKP2_UpdateUnitRole(unit)
+    QDKP2_RefreshAll()
+end
+
+-- ==================== МЕНЮ НАЗНАЧЕНИЯ РОЛЕЙ ====================
+
+function QDKP2_ShowRoleMenu(selectedPlayers, menuFrame)
+    local menu = {
+        { text = "Назначение ролей", isTitle = true },
+        { text = "Бис", 
+          func = function() 
+              QDKP2_SetManualRolesForPlayers(selectedPlayers, "BIS")
+          end },
+        { text = "Сбросить роль", 
+          func = function() 
+              QDKP2_SetManualRolesForPlayers(selectedPlayers, "NONE")
+          end },
+        { text = "Сбросить все роли", 
+          func = function() 
+              QDKP2_ResetAllRoles()
+          end },
+        { text = "" },
+        { text = "Закрыть", 
+          func = function() 
+              CloseDropDownMenus() 
+          end }
+    }
+    
+    EasyMenu(menu, menuFrame, "cursor", 0, 0, "MENU")
+end
+
+-- ==================== СИСТЕМА БОНУСОВ ЗА РОЛИ ====================
 
 QDKP2_RoleBonus = {
     enabled = true,
@@ -90,7 +471,7 @@ QDKP2_RoleBonus = {
     }
 }
 
--- Таблица бонусов за роли по боссам с разделением сложностей
+-- Таблица бонусов за роли по боссам
 QDKP2_RoleBonusBosses = {
     -- Icecrown Citadel (ЦЛК)
     { name = "--Icecrown Citadel--" },
@@ -190,8 +571,8 @@ QDKP2_RoleBonusBosses = {
         TANK_HEAL_25N = 125, TANK_HEAL_25H = 140, 
         BIS_TANK_HEAL_10N = 0, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 160, BIS_TANK_HEAL_25H = 210 },
-		
-	-- Ruby Sanctum (РС)
+    
+    -- Ruby Sanctum (РС)
     { name = "----Ruby Sanctum----" },
     
     { name = "Halion", 
@@ -202,7 +583,7 @@ QDKP2_RoleBonusBosses = {
         BIS_TANK_HEAL_10N = 0, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 300, BIS_TANK_HEAL_25H = 600 },
 
-	-- Trial of the Crusader (РС)
+    -- Trial of the Crusader (ТоС)
     { name = "--------TotC--------" },
     
     { name = "Northrend Beasts", 
@@ -212,8 +593,8 @@ QDKP2_RoleBonusBosses = {
         TANK_HEAL_25N = 0, TANK_HEAL_25H = 60, 
         BIS_TANK_HEAL_10N = 0, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 0, BIS_TANK_HEAL_25H = 80 },
-		
-	{ name = "Lord Jaraxxus", 
+    
+    { name = "Lord Jaraxxus", 
         BIS_10N = 0, BIS_10H = 0,
         BIS_25N = 0, BIS_25H = 20,
         TANK_HEAL_10N = 0, TANK_HEAL_10H = 0, 
@@ -244,115 +625,115 @@ QDKP2_RoleBonusBosses = {
         TANK_HEAL_25N = 0, TANK_HEAL_25H = 60, 
         BIS_TANK_HEAL_10N = 0, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 0, BIS_TANK_HEAL_25H = 80 },
-		
-	-- Ulduar (РС)
+    
+    -- Ulduar
     { name = "-------Ulduar-------" },
-	
-	{ name = "Flame Leviathan", 
+    
+    { name = "Flame Leviathan", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Ignis the Furnace Master", 
+    
+    { name = "Ignis the Furnace Master", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Razorscale", 
+    
+    { name = "Razorscale", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "XT-002 Deconstructor", 
+    
+    { name = "XT-002 Deconstructor", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "The Assembly of Iron", 
+    
+    { name = "The Assembly of Iron", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Kologarn", 
+    
+    { name = "Kologarn", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Auriaya", 
+    
+    { name = "Auriaya", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Hodir", 
+    
+    { name = "Hodir", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Thorim", 
+    
+    { name = "Thorim", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Freya", 
+    
+    { name = "Freya", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Mimiron", 
+    
+    { name = "Mimiron", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "General Vezax", 
+    
+    { name = "General Vezax", 
         BIS_10N = 20, BIS_10H = 0,
         BIS_25N = 40, BIS_25H = 0,
         TANK_HEAL_10N = 25, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 55, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Yogg-Saron", 
+    
+    { name = "Yogg-Saron", 
         BIS_10N = 30, BIS_10H = 0,
         BIS_25N = 60, BIS_25H = 0,
         TANK_HEAL_10N = 50, TANK_HEAL_10H = 0, 
         TANK_HEAL_25N = 70, TANK_HEAL_25H = 0, 
         BIS_TANK_HEAL_10N = 50, BIS_TANK_HEAL_10H = 0, 
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
-	
-	{ name = "Algalon the Observer", 
+    
+    { name = "Algalon the Observer", 
         BIS_10N = 30, BIS_10H = 0,
         BIS_25N = 60, BIS_25H = 0,
         TANK_HEAL_10N = 50, TANK_HEAL_10H = 0, 
@@ -361,23 +742,17 @@ QDKP2_RoleBonusBosses = {
         BIS_TANK_HEAL_25N = 100, BIS_TANK_HEAL_25H = 0 },
 }
 
--- Глобальные функции для работы с ролями (интеграция с Roster.lua)
+-- Функции для работы с бонусами
 function QDKP2_GetRoleBonusForBoss(boss, difficulty)
-    -- Возвращает бонусы за роли для конкретного босса и сложности
     if not QDKP2_RoleBonus.enabled then return {} end
     
-    difficulty = difficulty or "25N" -- по умолчанию 25 обычный
-    
-    -- Нормализуем имя босса перед поиском
+    difficulty = difficulty or "25N"
     local normalizedBoss = NormalizeBossName(boss)
     
     local bonuses = {}
-    local bossFound = false
     
-    -- Поиск босса в таблице
     for _, bossData in ipairs(QDKP2_RoleBonusBosses) do
         if bossData.name == normalizedBoss then
-            bossFound = true
             for roleKey, roleConfig in pairs(QDKP2_RoleBonus.config) do
                 local bonusField = roleKey .. "_" .. difficulty
                 local bonusAmount = bossData[bonusField]
@@ -393,16 +768,10 @@ function QDKP2_GetRoleBonusForBoss(boss, difficulty)
         end
     end
     
-    if not bossFound then
-        QDKP2_Debug(2, "RoleBonus", "Босс " .. normalizedBoss .. " (оригинал: " .. boss .. ") не найден в таблице бонусов за роли")
-    end
-    
     return bonuses
 end
 
 function QDKP2_AwardRoleBonus(boss, difficulty)
-    print("QDKP2: AwardRoleBonus вызвана для " .. boss .. ", сложность: " .. tostring(difficulty))
-    -- Начисляет бонусы за роли за убийство босса
     if not QDKP2_RoleBonus.enabled then
         QDKP2_Debug(2, "RoleBonus", "Бонусы за роли отключены")
         return
@@ -422,16 +791,11 @@ function QDKP2_AwardRoleBonus(boss, difficulty)
     local awardedPlayers = {}
     local totalAwarded = 0
     
-    -- Получаем список игроков в рейде
     for i = 1, QDKP2_GetNumRaidMembers() do
         local name = QDKP2_GetRaidRosterInfo(i)
         if name and QDKP2_IsInGuild(name) then
-            -- Получаем ключ бонуса через GetBonusRole из Roster
-            local bonusKey = nil
-            if QDKP2GUI_Roster and QDKP2GUI_Roster.GetBonusRole then
-                bonusKey = QDKP2GUI_Roster:GetBonusRole(name)
-            end
-
+            local bonusKey = QDKP2_GetBonusRole(name)
+            
             if bonusKey and bonuses[bonusKey] then
                 local bonusInfo = bonuses[bonusKey]
                 local reason = string.format("Бонус %s за %s", bonusInfo.name, boss)
@@ -450,7 +814,6 @@ function QDKP2_AwardRoleBonus(boss, difficulty)
         end
     end
     
-    -- Логируем общее начисление
     if #awardedPlayers > 0 then
         local roleText = ""
         for _, player in ipairs(awardedPlayers) do
@@ -460,15 +823,12 @@ function QDKP2_AwardRoleBonus(boss, difficulty)
         QDKP2log_Entry("RAID", string.format("Бонусы за роли за %s: %s", boss, roleText), QDKP2LOG_BOSS)
         QDKP2_Msg(QDKP2_COLOR_GREEN .. string.format("Начислены бонусы за роли за %s: %d игроков (+%d DKP)", 
             boss, #awardedPlayers, totalAwarded))
-    else
-        QDKP2_Debug(2, "RoleBonus", "Нет игроков с назначенными ролями для бонусов")
     end
     
     QDKP2_Events:Fire("DATA_UPDATED", "roster")
 end
 
 function QDKP2_RoleBonusSet(todo)
-    -- Включает/выключает систему бонусов за роли
     if todo == "toggle" then
         if QDKP2_RoleBonus.enabled then
             QDKP2_RoleBonusSet("off")
@@ -490,7 +850,6 @@ function QDKP2_IsRoleBonusEnabled()
     return QDKP2_RoleBonus.enabled
 end
 
--- Функции для GUI настроек
 function QDKP2_GetRoleBonusConfig()
     return QDKP2_RoleBonus.config
 end
@@ -507,27 +866,47 @@ function QDKP2_SetRoleBonusBosses(newBosses)
     end
 end
 
--- Утилиты для работы с ролями
 function QDKP2_GetPlayerRoleBonus(playerName, boss, difficulty)
     if not QDKP2_RoleBonus.enabled then return 0 end
     
-    local bonusKey = nil
-    if QDKP2GUI_Roster and QDKP2GUI_Roster.GetBonusRole then
-        bonusKey = QDKP2GUI_Roster:GetBonusRole(playerName)
-    end
+    local bonusKey = QDKP2_GetBonusRole(playerName)
     if not bonusKey then return 0 end
     
     local bonuses = QDKP2_GetRoleBonusForBoss(boss, difficulty)
     return bonuses[bonusKey] and bonuses[bonusKey].amount or 0
 end
 
--- Инициализация
-local function InitializeRoleBonus()
-    QDKP2_Debug(1, "RoleBonus", "Система бонусов за роли инициализирована")
+-- ==================== ИНИЦИАЛИЗАЦИЯ ====================
+
+function QDKP2_InitRoleSystem()
+    QDKP2_LoadRoles()
+    QDKP2_InitTalentRoleSystem()
+    QDKP2_ScanRaidRoles()
     
-    -- Проверяем интеграцию с Roster
-    if not QDKP2GUI_Roster then
-        QDKP2_Debug(1, "RoleBonus", "Внимание: Roster не найден, бонусы за роли могут не работать")
-    end
+    QDKP2_Debug(1, "RoleBonus", "Система ролей и бонусов за роли инициализирована")
 end
 
+-- Регистрируем события
+local function RegisterRoleEvents()
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_LOGOUT")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:RegisterEvent("RAID_ROSTER_UPDATE")
+    
+    frame:SetScript("OnEvent", function(frame, event, ...)
+        if event == "PLAYER_LOGOUT" then
+            QDKP2_SaveRoles()
+            QDKP2_Debug(2, "Roles", "Роли сохранены при выходе из игры")
+        elseif event == "PLAYER_ENTERING_WORLD" then
+            QDKP2_LoadRoles()
+            QDKP2_InitTalentRoleSystem()
+            QDKP2_ScanRaidRoles()
+        elseif event == "RAID_ROSTER_UPDATE" then
+            QDKP2_ScanRaidRoles()
+        end
+    end)
+end
+
+-- Запуск инициализации
+RegisterRoleEvents()
+QDKP2_InitRoleSystem()

@@ -37,7 +37,7 @@ myClass.ColumnWidth = {
     bid = 55,
     value = 50,
     officer = 140,
-    role = 70  -- НОВАЯ КОЛОНКА ДЛЯ РОЛЕЙ
+    role = 70  -- КОЛОНКА ДЛЯ РОЛЕЙ
 }
 
 myClass.Sort = {
@@ -46,9 +46,6 @@ myClass.Sort = {
     Values = {},
     Reverse = {}
 }
-
--- Хранение автоматически определенных ролей (по талантам)
-myClass.AutoRoles = {}
 
 myClass.Offset = 0
 myClass.Sel = "guild"
@@ -73,48 +70,6 @@ myClass.SearchText = ""
 myClass.SearchByMain = false
 myClass.SearchBox = nil
 
--- Настройки ролей
-myClass.RoleBonusConfig = {
-    TANK = {
-        name = "Танк",
-        color = { r = 0, g = 0.5, b = 1 }  -- Синий
-    },
-    HEAL = {
-        name = "Хил",
-        color = { r = 0, g = 1, b = 0 }  -- Зеленый
-    },
-    DD = {
-        name = "Дпс",
-        color = { r = 1, g = 0.3, b = 0.3 }  -- Красный
-    },
-    BIS_TANK = {
-        name = "Бис Танк",
-        color = { r = 0, g = 0.2, b = 0.6 }  -- Темно-синий
-    },
-    BIS_HEAL = {
-        name = "Бис Хил",
-        color = { r = 0, g = 0.5, b = 0 }  -- Темно-зеленый
-    },
-    BIS_DD = {
-        name = "Бис Дпс",
-        color = { r = 0.6, g = 0, b = 0 }  -- Темно-красный
-    }
-}
-
-myClass.RolePriority = {
-    BIS_TANK_HEAL = 1, -- Самый высокий приоритет (для бонусов)
-    TANK_HEAL = 2,     -- Ниже чем БисТанкХил (для бонусов)
-    BIS_TANK = 3,      -- Для отображения
-    BIS_HEAL = 4,      -- Для отображения
-    TANK = 5,          -- Для отображения
-    HEAL = 6,          -- Для отображения	
-    BIS_DD = 7,        -- Для отображения
-	BIS = 8,           -- Бис без авто роли
-    DD = 9             -- Для отображения
-}
-
-myClass.PlayerManualRoles = {}  -- таблица для ручных ролей (BIS)
-myClass.PlayerAutoRoles = {}    -- таблица для автоматических ролей (TANK/HEAL/DD)
 myClass.officerNoteCache = {} -- кеш для заметок игроков
 
 -- Sort values
@@ -125,13 +80,13 @@ myClass.Sort.Values.Alpha = 256
 myClass.Sort.Values.Rank = 128
 myClass.Sort.Values.Class = 64
 myClass.Sort.Values.Officer = 48
+myClass.Sort.Values.Role = 96  -- СОРТИРОВКА ПО РОЛЯМ
 myClass.Sort.Values.Net = 32
 myClass.Sort.Values.Total = 16
 myClass.Sort.Values.Spent = 8
 myClass.Sort.Values.Hours = 4
 myClass.Sort.Values.SessGain = 2
 myClass.Sort.Values.SessSpent = 1
-myClass.Sort.Values.Role = 96  -- НОВАЯ СОРТИРОВКА ПО РОЛЕЙ
 
 myClass.Sort.Reverse.BidValue = true
 myClass.Sort.Reverse.BidText = true
@@ -140,13 +95,13 @@ myClass.Sort.Reverse.Alpha = false
 myClass.Sort.Reverse.Rank = false
 myClass.Sort.Reverse.Class = false
 myClass.Sort.Reverse.Officer = false
+myClass.Sort.Reverse.Role = false  -- ДЛЯ РОЛЕЙ
 myClass.Sort.Reverse.Net = true
 myClass.Sort.Reverse.Total = true
 myClass.Sort.Reverse.Spent = true
 myClass.Sort.Reverse.Hours = true
 myClass.Sort.Reverse.SessGain = true
 myClass.Sort.Reverse.SessSpent = true
-myClass.Sort.Reverse.Role = false  -- ДЛЯ РОЛЕЙ
 
 -- Локализация для кнопки исключения из гильдии
 QDKP2_LOC_GUIREMOVEFROMGUILD = "Исключить из гильдии"
@@ -160,9 +115,6 @@ function myClass.OnLoad(self)
     self.MenuFrame = CreateFrame("Frame", "QDKP2_Frame2_DropDownMenu", self.Frame, "UIDropDownMenuTemplate")
     self.SubMenuFrame = CreateFrame("Frame", "QDKP2_Frame2_DropDownMenu", self.MenuFrame, "UIDropDownMenuTemplate")
     
-    -- Загружаем сохраненные роли
-    self:LoadRoles()
-    
     -- Загружаем сохраненные заметки
     self:LoadNotesCache()
     
@@ -170,13 +122,13 @@ function myClass.OnLoad(self)
     self:CreateSearchUI()
     self:CreateRoleUI()
     self:CreateNonGuildUI()
-	self:CreateICCTimerButtons()
-    self:CreateNotesButton() -- ПРОСТАЯ КНОПКА ДЛЯ ЗАМЕТОК
+    self:CreateICCTimerButtons()
+    self:CreateNotesButton()
     
     -- Регистрируем события для сохранения
     self:RegisterEvents()
     
-    QDKP2_Debug(2, "GUI-Roster", "Roster loaded successfully. Roles loaded: " .. tostring(self:CountRoles()))
+    QDKP2_Debug(2, "GUI-Roster", "Roster loaded successfully.")
 end
 
 function myClass.CreateSearchUI(self)
@@ -213,7 +165,7 @@ function myClass.CreateSearchUI(self)
     end)
 end
 
--- Создаем интерфейс для управления ролями (ЗЕЛЕНЫЙ)
+-- Создаем интерфейс для управления ролями
 function myClass.CreateRoleUI(self)
     self.RoleButton = CreateFrame("Button", "QDKP2_Frame2_RoleButton", self.Frame, "UIPanelButtonTemplate")
     self.RoleButton:SetSize(35, 25) 
@@ -234,17 +186,23 @@ function myClass.CreateRoleUI(self)
     local sortBtnRole = _G["QDKP2_Frame2_SortBtn_role"]
     if sortBtnRole then PaintGreen(sortBtnRole) end
 
-    -- ОБНОВЛЕННЫЙ СКРИПТ КЛИКА
+    -- Создаем фрейм для меню
+    self.RoleMenuFrame = CreateFrame("Frame", "QDKP2_RoleMenuFrame", UIParent, "UIDropDownMenuTemplate")
+    
+    -- Скрипт клика
     self.RoleButton:SetScript("OnClick", function() 
         if QDKP2_OfficerMode and QDKP2_OfficerMode() then
-            self:ShowRoleMenu() 
+            if QDKP2_ShowRoleMenu then
+                QDKP2_ShowRoleMenu(self.SelectedPlayers, self.RoleMenuFrame)
+            else
+                QDKP2_Msg("Система ролей не инициализирована")
+            end
         else
-            -- Сообщение в чат, если не офицер
             QDKP2_Msg("Вы не офицер.")
         end
     end)
 
-    -- ДОБАВЛЕНО: Тултип при наведении
+    -- Тултип при наведении
     self.RoleButton:SetScript("OnEnter", function(btn)
         if not (QDKP2_OfficerMode and QDKP2_OfficerMode()) then
             GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
@@ -257,22 +215,19 @@ function myClass.CreateRoleUI(self)
     self.RoleButton:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
-    
-    self.RoleMenuFrame = CreateFrame("Frame", "QDKP2_RoleMenuFrame", UIParent, "UIDropDownMenuTemplate")
 end
 
--- Создаем кнопку для обновления заметок (СИНИЙ)
+-- Создаем кнопку для обновления заметок
 function myClass.CreateNotesButton(self)
     self.NotesButton = CreateFrame("Button", "QDKP2_Frame2_NotesButton", self.Frame, "UIPanelButtonTemplate")
     self.NotesButton:SetSize(42, 25)
     self.NotesButton:SetPoint("LEFT", "QDKP2_Frame2_SortBtn_officer", "RIGHT", 0, 0)
     self.NotesButton:SetText("«Up»") 
     
-	-- Функция для яркой покраски
+    -- Функция для яркой покраски
     local function PaintBlue(btn)
         for _, tex in pairs({btn:GetRegions()}) do
             if tex:GetObjectType() == "Texture" then
-                -- Увеличиваем интенсивность синего и добавляем немного белого для яркости
                 tex:SetVertexColor(0.4, 0.7, 1) 
             end
         end
@@ -295,25 +250,21 @@ function myClass.CreateNonGuildUI(self)
     self.NonGuildButton:SetPoint("LEFT", self.SearchBox, "RIGHT", 10, 0) 
     self.NonGuildButton:SetText("Пуги")
     
-    -- Теперь кнопка сразу вызывает анонс без открытия меню
     self.NonGuildButton:SetScript("OnClick", function() 
         self:ShowNonGuildMenu() 
     end)
     
-    -- Применяем рамку (если функция ApplyThinBorder создана в коде выше)
     if ApplyThinBorder then
         ApplyThinBorder(self.NonGuildButton, 1, 0.5, 0)
     end
 end
 
 function myClass.ShowNonGuildMenu(self)
-    -- Проверяем наличие пугов
     if not QDKP2_NonGuildMembers or #QDKP2_NonGuildMembers == 0 then
         QDKP2_Msg("В рейде нет Пугов.")
         return
     end
 
-    -- 1. Определяем канал (RW или RAID)
     local channel = "RAID"
     if UnitInRaid("player") then
         if IsRaidLeader() or IsRaidOfficer() then
@@ -328,13 +279,11 @@ function myClass.ShowNonGuildMenu(self)
         return
     end
 
-    -- 2. Разбивка сообщения (лимит чата ~255 символов)
     local header = "Пуги в рейде: "
     local currentMsg = header
-    local maxLength = 240 -- Оставляем запас под системные данные чата
+    local maxLength = 240
 
     for i, name in ipairs(QDKP2_NonGuildMembers) do
-        -- Если добавление имени превысит лимит, отправляем текущее и начинаем новое
         if string.len(currentMsg .. name .. ", ") > maxLength then
             SendChatMessage(currentMsg, channel)
             currentMsg = "Пуги (продолжение): " .. name .. ", "
@@ -343,7 +292,6 @@ function myClass.ShowNonGuildMenu(self)
         end
     end
 
-    -- Убираем лишнюю запятую в конце и отправляем последний кусок
     currentMsg = currentMsg:gsub(", $", "")
     SendChatMessage(currentMsg, channel)
 end
@@ -360,15 +308,12 @@ end
 function myClass.CreateICCTimerButtons(self)
     if not self.NonGuildButton then return end
 
-    -- Внутренняя функция для проверки прав
     local function CanUseButtons()
         local isOfficer = QDKP2_OfficerMode and QDKP2_OfficerMode()
-        -- Проверка на лидера или ассистента рейда
         local isLeader = IsRaidLeader() or IsRaidOfficer() or IsPartyLeader()
         return isOfficer and isLeader
     end
 
-    -- Кнопка "С КВ"
     self.WithQuestButton = CreateFrame("Button", "QDKP2_Btn_WithQuest", self.Frame, "UIPanelButtonTemplate")
     self.WithQuestButton:SetSize(50, 22)
     self.WithQuestButton:SetPoint("LEFT", self.NonGuildButton, "RIGHT", 25, 0)
@@ -380,13 +325,10 @@ function myClass.CreateICCTimerButtons(self)
                 for _, line in ipairs(QDKP2_ICCTimers.WithQuest) do
                     RunAsMacro(line)
                 end
-            else
-                print("|cFFFF0000QDKP2 Error:|r ICCTimers.lua not found or empty!")
             end
         end
     end)
 
-    -- Кнопка "Без КВ"
     self.NoQuestButton = CreateFrame("Button", "QDKP2_Btn_NoQuest", self.Frame, "UIPanelButtonTemplate")
     self.NoQuestButton:SetSize(50, 22)
     self.NoQuestButton:SetPoint("LEFT", self.WithQuestButton, "RIGHT", 1, 0)
@@ -398,28 +340,16 @@ function myClass.CreateICCTimerButtons(self)
                 for _, line in ipairs(QDKP2_ICCTimers.NoQuest) do
                     RunAsMacro(line)
                 end
-            else
-                print("|cFFFF0000QDKP2 Error:|r ICCTimers.lua not found or empty!")
             end
         end
     end)
 
-    -- Функция управления видимостью
     local function UpdateVisibility()
-        -- 1. Мы на вкладке рейда?
         local isRaidTab = (self.Sel == "raid")
-        
-        -- 2. Мы вообще в группе или рейде?
         local inGroup = (GetNumRaidMembers() > 0) or (GetNumPartyMembers() > 0)
-        
-        -- 3. Проверка прав офицера гильдии (через встроенную функцию QDKP2)
         local isOfficer = QDKP2_OfficerMode and QDKP2_OfficerMode()
-        
-        -- 4. Есть ли права Лидера или Ассистента (для таймеров)
         local isLeader = IsRaidLeader() or IsRaidOfficer() or IsPartyLeader()
 
-        -- Логика для кнопки "Пуги"
-        -- Показываем если: Вкладка Рейд И в группе И Офицер ГИ
         if self.NonGuildButton then
             if isRaidTab and inGroup and isOfficer then
                 self.NonGuildButton:Show()
@@ -428,8 +358,6 @@ function myClass.CreateICCTimerButtons(self)
             end
         end
 
-        -- Логика для таймеров (С КВ / Без КВ)
-        -- Показываем если: Вкладка Рейд И Офицер ГИ И есть права Лидера/Ассиста
         if isRaidTab and isOfficer and isLeader then
             self.WithQuestButton:Show()
             self.NoQuestButton:Show()
@@ -439,7 +367,6 @@ function myClass.CreateICCTimerButtons(self)
         end
     end
 
-    -- Привязываем проверку к событиям
     self.Frame:HookScript("OnShow", UpdateVisibility)
     hooksecurefunc(self, "Refresh", UpdateVisibility)
 end
@@ -452,16 +379,12 @@ function myClass.RegisterEvents(self)
 
     self.Frame:SetScript("OnEvent", function(frame, event, ...)
         if event == "PLAYER_LOGOUT" then
-            self:SaveRoles()
             self:SaveNotesCache()
-            QDKP2_Debug(2, "Roster", "Роли и заметки сохранены при выходе из игры")
-
+            QDKP2_Debug(2, "Roster", "Заметки сохранены при выходе из игры")
         elseif event == "PLAYER_ENTERING_WORLD" then
-            self:InitTalentRoleSystem()
-            self:ScanRaidRoles()
-
+            self:LoadNotesCache()
         elseif event == "RAID_ROSTER_UPDATE" then
-            self:ScanRaidRoles()
+            -- Ничего не делаем, роли обновляются в RoleBonus.lua
         end
     end)
 end
@@ -475,19 +398,16 @@ function myClass.RefreshNotesCache(self)
     
     QDKP2_Msg("Обновляю заметки...")
     
-    -- Обновляем данные гильдии
     QDKP2_DownloadGuild()
     
     local totalMembers = QDKP2_GetNumGuildMembers(true)
     local updatedCount = 0
     
-    -- Создаем таблицу для быстрого поиска игроков из списка
     local listLookup = {}
     for _, name in ipairs(self.List) do
         listLookup[name] = true
     end
     
-    -- Загружаем заметки только для игроков в текущем списке
     for i = 1, totalMembers do
         local name, _, _, _, _, _, note = QDKP2_GetGuildRosterInfo(i)
         if name and listLookup[name] then
@@ -495,16 +415,12 @@ function myClass.RefreshNotesCache(self)
                 self.officerNoteCache[name] = note
                 updatedCount = updatedCount + 1
             else
-                -- Если заметка пустая, удаляем из кэша
                 self.officerNoteCache[name] = nil
             end
         end
     end
     
-    -- Сохраняем кэш
     self:SaveNotesCache()
-    
-    -- Обновляем отображение
     self:Refresh()
     
     QDKP2_Msg(string.format("Заметки обновлены: %d игроков", updatedCount))
@@ -512,10 +428,8 @@ end
 
 -- ЗАГРУЗКА КЭША ЗАМЕТОК
 function myClass.LoadNotesCache(self)
-    -- Используем глобальную переменную, объявленную в TOC
     QDKP2_NotesCacheDB = QDKP2_NotesCacheDB or {}
     
-    -- Загружаем заметки из сохраненной базы данных
     self.officerNoteCache = {}
     for playerName, note in pairs(QDKP2_NotesCacheDB) do
         self.officerNoteCache[playerName] = note
@@ -526,7 +440,6 @@ end
 
 -- СОХРАНЕНИЕ КЭША ЗАМЕТОК
 function myClass.SaveNotesCache(self)
-    -- Сохраняем заметки в глобальную переменную
     QDKP2_NotesCacheDB = {}
     for playerName, note in pairs(self.officerNoteCache) do
         QDKP2_NotesCacheDB[playerName] = note
@@ -544,248 +457,6 @@ function myClass.CountNotes(self)
         end
     end
     return count
-end
-
--- Функция для показа меню ролей
-function myClass.ShowRoleMenu(self)
-    local menu = {
-        { text = "Назначение ролей", isTitle = true },
-        { text = "Бис", 
-          func = function() 
-              self:AssignRoleToSelected("BIS") 
-          end },
-        { text = "Сбросить роль", 
-          func = function() 
-              self:AssignRoleToSelected("NONE") 
-          end },
-        { text = "Сбросить все роли", 
-          func = function() 
-              self:ResetAllRoles() 
-          end },
-        { text = "" },
-        { text = "Закрыть", 
-          func = function() 
-              CloseDropDownMenus() 
-          end }
-    }
-    
-    EasyMenu(menu, self.RoleMenuFrame, "cursor", 0, 0, "MENU")
-end
-
--- Функция назначения роли выбранным игрокам (обновленная)
-function myClass.AssignRoleToSelected(self, role)
-    if not self.SelectedPlayers or #self.SelectedPlayers == 0 then
-        QDKP2_Msg("Не выбраны игроки для назначения роли")
-        return
-    end
-    
-    for _, playerName in ipairs(self.SelectedPlayers) do
-        if role == "NONE" then
-            self.PlayerManualRoles[playerName] = nil
-            QDKP2_Debug(2, "Roles", "Сброшена ручная роль для: " .. playerName)
-        else
-            -- Устанавливаем только ручную роль (BIS)
-            self.PlayerManualRoles[playerName] = role
-            QDKP2_Debug(2, "Roles", "Назначена ручная роль '" .. role .. "' для: " .. playerName)
-        end
-    end
-    
-    self:SaveRoles()
-    self:Refresh()
-    QDKP2_Msg("Роли обновлены для выбранных игроков")
-end
-
--- Функция сохранения ролей
-function myClass.SaveRoles(self)
-    QDKP2_RosterRolesDB = QDKP2_RosterRolesDB or {}
-    
-    -- Сохраняем только ручные роли (BIS)
-    for playerName, role in pairs(self.PlayerManualRoles) do
-        QDKP2_RosterRolesDB[playerName] = role
-    end
-    
-    -- Удаляем записи для игроков без ручных ролей
-    for playerName, _ in pairs(QDKP2_RosterRolesDB) do
-        if not self.PlayerManualRoles[playerName] then
-            QDKP2_RosterRolesDB[playerName] = nil
-        end
-    end
-    
-    QDKP2_Debug(2, "Roles", "Роли сохранены. Ручных записей: " .. tostring(self:CountManualRoles()))
-end
-
--- Функция загрузки ролей
-function myClass.LoadRoles(self)
-    if not QDKP2_RosterRolesDB then
-        QDKP2_RosterRolesDB = {}
-        QDKP2_Debug(2, "Roles", "База данных ролей инициализирована")
-        return
-    end
-    
-    -- Загружаем только ручные роли из сохраненной базы данных
-    self.PlayerManualRoles = {}
-    for playerName, role in pairs(QDKP2_RosterRolesDB) do
-        self.PlayerManualRoles[playerName] = role
-    end
-    
-    QDKP2_Debug(2, "Roles", "Роли загружены. Ручных записей: " .. tostring(self:CountManualRoles()))
-end
-
--- Функция сброса всех ролей при закрытии сессии
-function myClass.ResetRolesOnSessionClose(self)
-    local roleCount = 0
-    
-    -- Сбрасываем ручные роли (BIS)
-    if self.PlayerManualRoles then
-        for _ in pairs(self.PlayerManualRoles) do
-            roleCount = roleCount + 1
-        end
-        table.wipe(self.PlayerManualRoles)
-    end
-    
-    -- Очищаем сохраненную базу данных
-    if QDKP2_RosterRolesDB then
-        table.wipe(QDKP2_RosterRolesDB)
-    end
-    
-    if roleCount > 0 then
-        QDKP2_Debug(2, "Roles", "Роли сброшены при закрытии сессии. Сброшено: " .. roleCount .. " ролей")
-    else
-        QDKP2_Debug(2, "Roles", "Нет ролей для сброса при закрытии сессии")
-    end
-    
-    return roleCount > 0
-end
-
--- Функция подсчета ролей
-function myClass.CountRoles(self)
-    local count = 0
-    if self.PlayerManualRoles then
-        for _ in pairs(self.PlayerManualRoles) do
-            count = count + 1
-        end
-    end
-    return count
-end
-
--- Функция сброса всех ролей (обновленная)
-function myClass.ResetAllRoles(self)
-    table.wipe(self.PlayerManualRoles)  -- Сбрасываем только ручные роли
-    
-    if QDKP2_RosterRolesDB then
-        table.wipe(QDKP2_RosterRolesDB)
-    end
-    
-    self:Refresh()
-    QDKP2_Msg("Все роли сброшены")
-end
-
-function myClass.CountManualRoles(self)
-    local count = 0
-    if self.PlayerManualRoles then
-        for _ in pairs(self.PlayerManualRoles) do
-            count = count + 1
-        end
-    end
-    return count
-end
-
-function myClass.DebugRoles(self, playerName)
-    if not playerName then
-        for name, _ in pairs(self.PlayerManualRoles) do
-            QDKP2_Debug(1, "Roles", string.format("Роли %s: Авто=%s, Ручная=%s, Бонус=%s", 
-                name, 
-                tostring(self.PlayerAutoRoles[name]), 
-                tostring(self.PlayerManualRoles[name]),
-                tostring(self:GetBonusRole(name))))
-        end
-    else
-        QDKP2_Debug(1, "Roles", string.format("Роли %s: Авто=%s, Ручная=%s, Бонус=%s", 
-            playerName, 
-            tostring(self.PlayerAutoRoles[playerName]), 
-            tostring(self.PlayerManualRoles[playerName]),
-            tostring(self:GetBonusRole(playerName))))
-    end
-end
-
--- Функция получения названия роли игрока
-function myClass.GetPlayerRole(self, playerName)
-    local autoRole = self.PlayerAutoRoles[playerName]
-    local manualRole = self.PlayerManualRoles[playerName]
-    
-    if manualRole == "BIS" then
-        if autoRole == "TANK" then
-            return "BIS_TANK"
-        elseif autoRole == "HEAL" then
-            return "BIS_HEAL"
-        elseif autoRole == "DD" then
-            return "BIS_DD"
-        else
-            return "BIS"  -- Бис без авто роли
-        end
-    elseif autoRole == "TANK" then
-        return "TANK"
-    elseif autoRole == "HEAL" then
-        return "HEAL"
-    elseif autoRole == "DD" then
-        return "DD"
-    end
-    
-    return nil
-end
-
--- Функция получения отображаемого названия роли
-function myClass.GetPlayerRoleDisplay(self, playerName)
-    local autoRole = self.PlayerAutoRoles[playerName]
-    local manualRole = self.PlayerManualRoles[playerName]
-    
-    if manualRole == "BIS" then
-        if autoRole == "TANK" then
-            return "Бис Танк"
-        elseif autoRole == "HEAL" then
-            return "Бис Хил"
-        elseif autoRole == "DD" then
-            return "Бис Дпс"
-        else
-            return "Бис"  -- На случай если авто роли нет
-        end
-    elseif autoRole == "TANK" then
-        return "Танк"
-    elseif autoRole == "HEAL" then
-        return "Хил"
-    elseif autoRole == "DD" then
-        return "Дпс"
-    end
-    
-    return ""
-end
-
-
--- Функция получения цвета роли
-function myClass.GetPlayerRoleColor(self, playerName)
-    local role = self:GetPlayerRole(playerName)
-    local manualRole = self.PlayerManualRoles[playerName]
-    local autoRole = self.PlayerAutoRoles[playerName]
-    
-    if manualRole == "BIS" then
-        if autoRole == "TANK" then
-            return { r = 0, g = 0.2, b = 0.6 }  -- Темно-синий для Бис Танк
-        elseif autoRole == "HEAL" then
-            return { r = 0, g = 0.5, b = 0 }  -- Темно-зеленый для Бис Хил
-        elseif autoRole == "DD" then
-            return { r = 0.6, g = 0, b = 0 }  -- Темно-красный для Бис Дпс
-        else
-            return { r = 1, g = 0.84, b = 0 }  -- Золотой для Бис (без авто роли)
-        end
-    elseif autoRole == "TANK" then
-        return { r = 0, g = 0.5, b = 1 }  -- Синий для танка
-    elseif autoRole == "HEAL" then
-        return { r = 0, g = 1, b = 0 }  -- Зеленый для хила
-    elseif autoRole == "DD" then
-        return { r = 1, g = 0.3, b = 0.3 }  -- Красный для Дпс
-    end
-    
-    return { r = 1, g = 1, b = 1 }  -- Белый для без роли
 end
 
 function myClass.Show(self)
@@ -810,7 +481,7 @@ end
 local function CanRemoveFromGuild()
     if not CanGuildRemove then
         QDKP2_Debug(2, "Roster", "Функция CanGuildRemove не найдена, проверка прав пропущена")
-        return true -- Если функция не существует, предполагаем что права есть
+        return true
     end
     
     if not CanGuildRemove() then
@@ -824,7 +495,6 @@ end
 local function RemoveFromGuild(players)
     if not players or #players == 0 then return end
     
-    -- Проверяем права
     if not CanRemoveFromGuild() then return end
     
     local removedCount = 0
@@ -864,11 +534,10 @@ StaticPopupDialogs["QDKP2_REMOVE_FROM_GUILD_SINGLE"] = {
 }
 
 StaticPopupDialogs["QDKP2_REMOVE_FROM_GUILD_MULTI"] = {
-    text = "", -- будем устанавливать динамически
+    text = "",
     button1 = YES,
     button2 = NO,
     OnAccept = function(self, data)
-        -- ИСПРАВЛЕНИЕ: передаем именно список игроков, который лежит в data.players
         if data and data.players then
             RemoveFromGuild(data.players)
         end
@@ -881,7 +550,7 @@ StaticPopupDialogs["QDKP2_REMOVE_FROM_GUILD_MULTI"] = {
         if data and data.players then
             local playerList = FormatPlayerList(data.players)
             self.text:SetText(string.format(QDKP2_LOC_GUIREMOVEFROMGUILD_CONFIRM_MULTI, playerList, #data.players))
-            self:SetHeight(self.text:GetHeight() + 100) -- динамическая высота
+            self:SetHeight(self.text:GetHeight() + 100)
         end
     end,
 }
@@ -907,7 +576,6 @@ function myClass.Refresh(self, forceResort)
 
     myClass:PupulateList()
     
-    -- ПРИМЕНЯЕМ ФИЛЬТР ПОИСКА
     local originalList = self.List
     self.List = self:ApplySearchFilter()
 
@@ -918,7 +586,7 @@ function myClass.Refresh(self, forceResort)
         myClass:ShowColumn('bid', false)
         myClass:ShowColumn('value', false)
         myClass:ShowColumn('officer', true)
-        myClass:ShowColumn('role', true)  -- ПОКАЗЫВАЕМ КОЛОНКУ РОЛЕЙ
+        myClass:ShowColumn('role', true)
         QDKP2_Frame2_sesscount:Hide()
         QDKP2_Frame2_SessionZone:Hide()
         QDKP2_Frame2_bidcount:Hide()
@@ -939,7 +607,7 @@ function myClass.Refresh(self, forceResort)
         myClass:ShowColumn('bid', false)
         myClass:ShowColumn('value', false)
         myClass:ShowColumn('officer', true)
-        myClass:ShowColumn('role', true)  -- ПОКАЗЫВАЕМ КОЛОНКУ РОЛЕЙ
+        myClass:ShowColumn('role', true)
         QDKP2_Frame2_sesscount:Show()
         QDKP2_Frame2_SessionZone:Show()
         QDKP2_Frame2_bidcount:Hide()
@@ -956,7 +624,7 @@ function myClass.Refresh(self, forceResort)
         myClass:ShowColumn('bid', true)
         myClass:ShowColumn('value', true)
         myClass:ShowColumn('officer', true)
-        myClass:ShowColumn('role', true)  -- ПОКАЗЫВАЕМ КОЛОНКУ РОЛЕЙ
+        myClass:ShowColumn('role', true)
         QDKP2_Frame2_sesscount:Show()
         QDKP2_Frame2_SessionZone:Show()
         QDKP2_Frame2_bidcount:Show()
@@ -984,19 +652,16 @@ function myClass.Refresh(self, forceResort)
         myClass:ShowColumn('hours', false)
     end
 
-	-- Форсируем сортировку, если включены фильтры (чужаки, поиск или скрытие альтов)
-	if ((self.Sel == 'raid' or self.Sel == 'bid') and QDKP2GUI_Vars.ShowOutGuild) 
-	   or not self.ShowAlts 
-	   or (self.SearchText and self.SearchText ~= "" and self.SearchText ~= "Поиск...") then
-		forceResort = true;
-	end
+    if ((self.Sel == 'raid' or self.Sel == 'bid') and QDKP2GUI_Vars.ShowOutGuild) 
+       or not self.ShowAlts 
+       or (self.SearchText and self.SearchText ~= "" and self.SearchText ~= "Поиск...") then
+        forceResort = true;
+    end
     self:SortList(nil, nil, forceResort)
 
-    -- ДОБАВЛЯЕМ СЧЕТЧИК ИГРОКОВ В ЗАГОЛОВОК С УЧЕТОМ ПОИСКА
     local displayCount = tostring(#self.List)
     local totalCount = tostring(#originalList)
     
-    -- Обновляем заголовок окна с информацией о поиске
     if self.SearchText and self.SearchText ~= "" and self.SearchText ~= "Поиск..." then
         if self.Sel == 'guild' then
             QDKP2_Frame2_Header:SetText("Гильдия - " .. displayCount .. "/" .. totalCount)
@@ -1008,7 +673,6 @@ function myClass.Refresh(self, forceResort)
             QDKP2_Frame2_Header:SetText("Ставки - " .. displayCount .. "/" .. totalCount)
         end
     else
-        -- оригинальный заголовок без информации о поиске
         if self.Sel == 'guild' then
             QDKP2_Frame2_Header:SetText("Гильдия - " .. displayCount)
         elseif self.Sel == 'guildonline' then
@@ -1028,7 +692,6 @@ function myClass.Refresh(self, forceResort)
     end
 
     for i = 1, QDKP2GUI_Roster.ENTRIES do
-        --fills in the list data
         local indexAt = self.Offset + i
         local ParentName = "QDKP2_frame2_entry" .. tostring(i)
         if indexAt <= #self.List then
@@ -1061,17 +724,22 @@ function myClass.Refresh(self, forceResort)
                 a = 0.4;
             end
 
-            -- ДОБАВЛЯЕМ ОТОБРАЖЕНИЕ РОЛИ
-            local roleDisplay = self:GetPlayerRoleDisplay(name)
-            local roleColor = self:GetPlayerRoleColor(name)
+            -- ПОЛУЧАЕМ РОЛЬ ИЗ ГЛОБАЛЬНОЙ СИСТЕМЫ
+            local roleDisplay = ""
+            local roleColor = { r = 1, g = 1, b = 1 }
+            if QDKP2_GetPlayerRoleDisplayName then
+                roleDisplay = QDKP2_GetPlayerRoleDisplayName(name)
+            end
+            if QDKP2_GetPlayerRoleColor then
+                roleColor = QDKP2_GetPlayerRoleColor(name)
+            end
 
-            --Setting fields color
             getglobal(ParentName .. "_name"):SetVertexColor(r, g, b, a)
             getglobal(ParentName .. "_roll"):SetVertexColor(r, g, b, a)
             getglobal(ParentName .. "_bid"):SetVertexColor(r, g, b, a)
             getglobal(ParentName .. "_value"):SetVertexColor(r, g, b, a)
             getglobal(ParentName .. "_rank"):SetVertexColor(r, g, b, a)
-            getglobal(ParentName .. "_role"):SetVertexColor(roleColor.r, roleColor.g, roleColor.b, a)  -- ЦВЕТ ДЛЯ РОЛИ
+            getglobal(ParentName .. "_role"):SetVertexColor(roleColor.r, roleColor.g, roleColor.b, a)
             local classColor = colors
             if not QDKP2_USE_CLASS_BASED_COLORS then
                 classColor = QDKP2_GetClassColor(class)
@@ -1089,7 +757,6 @@ function myClass.Refresh(self, forceResort)
             getglobal(ParentName .. "_deltatotal"):SetVertexColor(r, g, b, a)
             getglobal(ParentName .. "_deltaspent"):SetVertexColor(r, g, b, a)
 
-            --Setting content
             local nameS, roll, bid, value, rank, officerNote, net, total, spent, hours, s_gain, s_spent
             nameS = QDKP2_GetName(name) or 'Unknown'
             if self.Sel == 'bid' then
@@ -1104,7 +771,6 @@ function myClass.Refresh(self, forceResort)
             end
             rank = QDKP2rank[name]
             
-            -- ПОЛУЧАЕМ ГИЛЬДЕЙСКУЮ ЗАМЕТКУ ИЗ КЭША
             officerNote = self.officerNoteCache[name] or ''
             
             if class == "Death Knight" then
@@ -1140,7 +806,7 @@ function myClass.Refresh(self, forceResort)
             getglobal(ParentName .. "_rank"):SetText(tostring(rank or '-'));
             getglobal(ParentName .. "_class"):SetText(tostring(class or '-'));
             getglobal(ParentName .. "_officer"):SetText(tostring(officerNote));
-            getglobal(ParentName .. "_role"):SetText(tostring(roleDisplay));  -- ВЫВОДИМ РОЛЬ
+            getglobal(ParentName .. "_role"):SetText(tostring(roleDisplay));
             getglobal(ParentName .. "_net"):SetText(tostring(net or '-') .. DKP_Ast);
             getglobal(ParentName .. "_total"):SetText(tostring(total or '-') .. DKP_Ast);
             getglobal(ParentName .. "_spent"):SetText(tostring(spent or '-') .. DKP_Ast);
@@ -1166,9 +832,7 @@ function myClass.Refresh(self, forceResort)
     FauxScrollFrame_Update(QDKP2_frame2_scrollbar, #self.List, numEntries, 16);
 end
 
--- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ ПОЛУЧЕНИЯ ГИЛЬДЕЙСКОЙ ЗАМЕТКИ
 function myClass.GetOfficerNote(self, name)
-    -- Возвращаем заметку только из кэша
     if not name then return "" end
     return self.officerNoteCache[name] or ""
 end
@@ -1185,7 +849,7 @@ function myClass.PupulateList(self)
         if not self.ShowAlts then
             self.List = {}
             for i, name in pairs(QDKP2name) do
-                if not QDKP2_IsAlt(name) then  -- показываем только не-альтов
+                if not QDKP2_IsAlt(name) then
                     table.insert(self.List, name)
                 end
             end
@@ -1197,7 +861,7 @@ function myClass.PupulateList(self)
         self.List = {}
         for i, name in pairs(QDKP2name) do
             if QDKP2online[name] and not QDKP2_IsExternal(name) then
-                if self.ShowAlts or not QDKP2_IsAlt(name) then  -- фильтр для онлайн
+                if self.ShowAlts or not QDKP2_IsAlt(name) then
                     table.insert(self.List, name)
                 end
             end
@@ -1237,7 +901,6 @@ function myClass.ApplySearchFilter(self)
     for i, name in pairs(self.List) do
         local found = false
         
-        -- Проверяем текущее имя персонажа
         local displayName = QDKP2_GetName(name) or name
         local displayNameLower = string.lower(displayName)
         
@@ -1245,7 +908,6 @@ function myClass.ApplySearchFilter(self)
             found = true
         end
         
-        -- Если включен поиск по мейну, проверяем основного персонажа
         if not found and self.SearchByMain then
             local mainName = QDKP2_GetMain(name)
             if mainName then
@@ -1290,7 +952,6 @@ function myClass.ShowColumn(self, Column, todo)
     local width = myClass.ColumnWidth[Column]
     local expand, reduce
     
-    -- ИСПРАВЛЕНИЕ: Правильно получаем объект кнопки сортировки
     local SortButton = getglobal("QDKP2_Frame2_SortBtn_" .. Column)
     if SortButton and SortButton:IsVisible() and not todo then
         QDKP2_Debug(3, "GUI-Roster", "Hiding column " .. tostring(Column))
@@ -1307,7 +968,7 @@ function myClass.ShowColumn(self, Column, todo)
             self.RoleButton:Hide()
         end
     end
-	
+    
     if Column == "officer" and self.NotesButton then
         if todo then
             self.NotesButton:Show()
@@ -1319,10 +980,8 @@ function myClass.ShowColumn(self, Column, todo)
         local ParentName = "QDKP2_frame2_entry" .. tostring(i)
         local ColObj = getglobal(ParentName .. '_' .. Column)
         if todo then
-            --ColObj:Show()
             ColObj:SetWidth(width + 1)
         else
-            --ColObj:Hide()
             ColObj:SetWidth(0)
         end
         local RowObj = getglobal(ParentName)
@@ -1335,13 +994,11 @@ function myClass.ShowColumn(self, Column, todo)
     
     local TitleColObj = getglobal("QDKP2_frame2_title_" .. Column)
     if todo then
-        --TitleColObj:Show()
         TitleColObj:SetWidth(width + 1)
         if SortButton then
             SortButton:Show()
         end
     else
-        --TitleColObj:Hide()
         TitleColObj:SetWidth(0)
         if SortButton then
             SortButton:Hide()
@@ -1356,7 +1013,6 @@ function myClass.ShowColumn(self, Column, todo)
 end
 
 ---------------------- OnClick functions --------------------------
-
 
 function myClass.LeftClickEntry(self)
     local name, btnIndex = QDKP2GUI_GetClickedEntry(myClass)
@@ -1391,7 +1047,7 @@ function myClass.LeftClickEntry(self)
             self:SelectPlayer(name, true)
         elseif QDKP2GUI_IsDoubleClick(myClass) and QDKP2_IsInGuild(name) then
             if QDKP2_OfficerMode() then
-                QDKP2GUI_Toolbox:Popup(self.SelectedPlayers) --double click
+                QDKP2GUI_Toolbox:Popup(self.SelectedPlayers)
             else
                 QDKP2GUI_Log:ShowPlayer(myClass.SelectedPlayers[1])
             end
@@ -1430,9 +1086,9 @@ function myClass.ChangeList(self, Type)
         myClass.Sort.Reverse.BidValue = true
         myClass:SortList("BidValue")
     else
-        myClass.Sort.LastLen = -1 --forces a resort
+        myClass.Sort.LastLen = -1
     end
-    myClass:SelectPlayer(list) --this is to clean the selection if the previous selected players are no longer available.
+    myClass:SelectPlayer(list)
 end
 
 function myClass.DragDropManager(self)
@@ -1465,8 +1121,6 @@ end
 ---------- Entries Selection --------------------
 
 function myClass.SelectPlayer(self, name, multiple)
-    --Selects given player. if multiple is true, does a multiple selection (ctrl key), wich will toggle the
-    --selected state of name.
     QDKP2_Debug(3, "GUI-Roster", "Selecting" .. tostring(name))
     myClass.PreviousShiftSelSet = nil
     if name == "RAID" then
@@ -1543,7 +1197,7 @@ end
 
 function myClass.ToggleShowAlts(self)
     self.ShowAlts = not self.ShowAlts
-    self:Refresh(true)  -- forceResort = true
+    self:Refresh(true)
 end
 
 function myClass.GetPlayerCounts(self)
@@ -1659,9 +1313,7 @@ local QuickModifyVoices = {
     },
 }
 
-
 local LogVoices = {
-    -- Dictionary with all the log voices.
     OpenLog = { text = QDKP2_LOC_GUISHOWLOG,
                 func = function()
                     QDKP2GUI_Log:ShowPlayer(myClass.SelectedPlayers[1])
@@ -1692,7 +1344,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFF00FF00Тотал Р1 (+200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 200, "за Тотал Р1")
@@ -1700,7 +1351,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFF00FF00Тотал Р2-5 (+100)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 100, "за Тотал Р2-5")
@@ -1708,7 +1358,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Орк 21+ (+400)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 400, "за Дпс Орк 21+")
@@ -1716,7 +1365,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Орк 19+ (+200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 200, "за Дпс Орк 19+")
@@ -1724,7 +1372,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Проф 17+ (+200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 200, "за ДПС Проф 17+")
@@ -1732,7 +1379,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Проф 15+ (+100)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 100, "за ДПС Проф 15+")
@@ -1740,7 +1386,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Лич 18+ (+200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 200, "за ДПС Лич 18+")
@@ -1748,7 +1393,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFFCC00Дпс Лич 16+ (+100)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 100, "за ДПС Лич 16+")
@@ -1758,194 +1402,190 @@ local LogVoices = {
             },
         }
     },
-	MinusQuickMod = { 
-		text = "|cFF8B0000Минусы",
-		hasArrow = true,
-		menuList = {
-			{ text = "ЦЛК", hasArrow = true, menuList = {
-				{ text = "|cFFFF0000Общие", notClickable = true },
-				{ text = "Вайп (1500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "Вайп")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Пул (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Пул")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Тупая смерть (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Тупая смерть")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Леди", notClickable = true },
-				{ text = "Взорвал духа (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванного духа")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Не снял пухи (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Не снятые пухи")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Не кик касты (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Не кикнутые касты")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Не контролит (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Отсутствие контролей")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Орк", notClickable = true },
-				{ text = "Не дал планку (1500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "Невыданную планку")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Гниломорд/Тухлопуз", notClickable = true },
-				{ text = "Заблевал рейд (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Заблёванный рейд")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Поймал пельмень (300)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 300, "Пойманный пельмень")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Профессор", notClickable = true },
-				{ text = "Сбежался с красным (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Тесный контакт с Красным")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Полутал Колбы/Пельмень (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "скушанные Колбы/Пельмени")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Принцы", notClickable = true },
-				{ text = "Взорвал шар в рейде (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв шара в рейде")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Лана'тэль", notClickable = true },
-				{ text = "Не сбежался с пактом (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Не сбежался с пактом")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Не вынес тени (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Невынос теней из рейда")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Синдрагоса", notClickable = true },
-				{ text = "Заморозил рейд (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Заморозку рейда")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Взорвал освобождёнку (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв освобождёнки")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "|cFFFF0000Лич", notClickable = true },
-				{ text = "Взорвал трапу (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв ловушки")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Не вынес чуму (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Невынос чумы")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				{ text = "Осквернение в рейд (500)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Осквернение в рейд")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				-- Добавьте свои пункты сюда
-			}},
-			{ text = "РС", hasArrow = true, menuList = {
-				{ text = "Взорванные Духи (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ЦЛК)")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				-- Добавьте свои пункты сюда
-			}},
-			{ text = "ИВК", hasArrow = true, menuList = {
-				{ text = "Взорванные Духи (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ИЧ)")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				-- Добавьте свои пункты сюда
-			}},
-			{ text = "Ульдуар", hasArrow = true, menuList = {
-				{ text = "Взорванные Духи (1000)",
-				  func = function()
-					  QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ОС)")
-					  QDKP2GUI_CloseMenus()
-					  QDKP2_RefreshAll()
-				  end
-				},
-				-- Добавьте свои пункты сюда
-			}},
-		}
-	},
+    MinusQuickMod = { 
+        text = "|cFF8B0000Минусы",
+        hasArrow = true,
+        menuList = {
+            { text = "ЦЛК", hasArrow = true, menuList = {
+                { text = "|cFFFF0000Общие", notClickable = true },
+                { text = "Вайп (1500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "Вайп")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Пул (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Пул")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Тупая смерть (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Тупая смерть")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Леди", notClickable = true },
+                { text = "Взорвал духа (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванного духа")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Не снял пухи (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Не снятые пухи")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Не кик касты (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Не кикнутые касты")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Не контролит (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Отсутствие контролей")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Орк", notClickable = true },
+                { text = "Не дал планку (1500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "Невыданную планку")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Гниломорд/Тухлопуз", notClickable = true },
+                { text = "Заблевал рейд (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Заблёванный рейд")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Поймал пельмень (300)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 300, "Пойманный пельмень")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Профессор", notClickable = true },
+                { text = "Сбежался с красным (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Тесный контакт с Красным")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Полутал Колбы/Пельмень (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1500, "скушанные Колбы/Пельмени")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Принцы", notClickable = true },
+                { text = "Взорвал шар в рейде (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв шара в рейде")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Лана'тэль", notClickable = true },
+                { text = "Не сбежался с пактом (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Не сбежался с пактом")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Не вынес тени (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Невынос теней из рейда")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Синдрагоса", notClickable = true },
+                { text = "Заморозил рейд (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Заморозку рейда")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Взорвал освобождёнку (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв освобождёнки")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "|cFFFF0000Лич", notClickable = true },
+                { text = "Взорвал трапу (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Взрыв ловушки")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Не вынес чуму (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Невынос чумы")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+                { text = "Осквернение в рейд (500)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 500, "Осквернение в рейд")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+            }},
+            { text = "РС", hasArrow = true, menuList = {
+                { text = "Взорванные Духи (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ЦЛК)")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+            }},
+            { text = "ИВК", hasArrow = true, menuList = {
+                { text = "Взорванные Духи (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ИЧ)")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+            }},
+            { text = "Ульдуар", hasArrow = true, menuList = {
+                { text = "Взорванные Духи (1000)",
+                  func = function()
+                      QDKP2_PlayerSpends(myClass.SelectedPlayers, 1000, "Взорванных духов (ОС)")
+                      QDKP2GUI_CloseMenus()
+                      QDKP2_RefreshAll()
+                  end
+                },
+            }},
+        }
+    },
     MyQuickMod = { 
         text = "|cFF3366FFЦЛК Бис-Хил-Танк",
         hasArrow = true,
@@ -1958,7 +1598,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Хил/Танк (+400)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 400, "за ХИЛ/ТАНК")
@@ -1966,7 +1605,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Бис Хил/Танк (+600)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 600, "за БИС ХИЛ/ТАНК")
@@ -1974,7 +1612,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFF3366FFЦЛК ХМ", notClickable = true },
             { text = "Бис (+400)",
               func = function()
@@ -1983,7 +1620,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Хил/Танк (+800)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 800, "за ХИЛ/ТАНК")
@@ -1991,7 +1627,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Бис Хил/Танк (+1200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 1200, "за БИС ХИЛ/ТАНК")
@@ -2013,7 +1648,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Хил/Танк (+200)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 200, "за ХИЛ/ТАНК")
@@ -2021,7 +1655,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Бис Хил/Танк (+300)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 300, "за БИС ХИЛ/ТАНК")
@@ -2029,7 +1662,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "|cFFFF0000РС ХМ", notClickable = true },
             { text = "Бис (+200)",
               func = function()
@@ -2038,7 +1670,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Хил/Танк (+400)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 400, "за ХИЛ/ТАНК")
@@ -2046,7 +1677,6 @@ local LogVoices = {
                   QDKP2_RefreshAll()
               end
             },
-            
             { text = "Бис Хил/Танк (+600)",
               func = function()
                   QDKP2_PlayerGains(myClass.SelectedPlayers, 600, "за БИС ХИЛ/ТАНК")
@@ -2061,37 +1691,26 @@ local LogVoices = {
         func = function()
             local sel = myClass.SelectedPlayers
             if not sel or #sel == 0 then return end
-            
-            -- Проверяем права
             if not CanRemoveFromGuild() then return end
-            
             StaticPopup_Show("QDKP2_REMOVE_FROM_GUILD_SINGLE", sel[1], nil, sel)
         end
     },
-    
     RemoveFromGuildMulti = { 
         text = QDKP2_LOC_GUIREMOVEFROMGUILD .. " (" .. #myClass.SelectedPlayers .. ")",
         func = function()
             local sel = myClass.SelectedPlayers
             if not sel or #sel == 0 then return end
-            
-            -- Проверяем права
             if not CanRemoveFromGuild() then return end
-            
-            -- Фильтруем только игроков в гильдии (кроме себя)
             local guildPlayers = {}
             for _, playerName in ipairs(sel) do
                 if QDKP2_IsInGuild(playerName) and playerName ~= UnitName("player") then
                     table.insert(guildPlayers, playerName)
                 end
             end
-            
             if #guildPlayers == 0 then
                 QDKP2_Msg(QDKP2_COLOR_RED .. "Нет игроков для исключения из гильдии")
                 return
             end
-            
-            -- Показываем диалог со списком имен
             StaticPopup_Show("QDKP2_REMOVE_FROM_GUILD_MULTI", nil, nil, {players = guildPlayers})
         end
     },
@@ -2106,11 +1725,9 @@ local LogVoices = {
     },
     AltClear = { text = QDKP2_LOC_GUIUNLINKALT,
                  func = function()
-                     -- ИСПРАВЛЕНИЕ: Разрешаем массовую отвязку альтов
                      for i, name in pairs(myClass.SelectedPlayers) do
                         QDKP2_ClearAlt(name)
                      end
-                     -- Обновляем список после изменений
                      QDKP2_RefreshAll()
                  end
     },
@@ -2131,7 +1748,6 @@ local LogVoices = {
     },
     ExternalRem = { text = QDKP2_LOC_GUIREMEXTERNAL,
                     func = function()
-                        -- ИСПРАВЛЕНИЕ: Разрешаем массовое удаление External
                         local removed = false
                         for i, name in pairs(myClass.SelectedPlayers) do
                             if QDKP2_IsExternal(name) then
@@ -2282,12 +1898,11 @@ local LogVoices = {
         end
     },
 }
--- Функция для обновления текста групповой кнопки
+
 local function UpdateRemoveFromGuildMultiText()
     if not myClass.SelectedPlayers then return end
     local count = #myClass.SelectedPlayers
     
-    -- Подсчитываем только игроков в гильдии (кроме себя)
     local guildPlayersCount = 0
     for _, playerName in ipairs(myClass.SelectedPlayers) do
         if QDKP2_IsInGuild(playerName) and playerName ~= UnitName("player") then
@@ -2308,7 +1923,7 @@ function myClass.PlayerMenu(self, List)
     UpdateRemoveFromGuildMultiText()
     if not QDKP2_OfficerMode() then
         return ;
-    end --view mode doesn't have a player menu.
+    end
     local managing = QDKP2_ManagementMode()
     local sel = List or self.SelectedPlayers
     local menu
@@ -2316,7 +1931,7 @@ function myClass.PlayerMenu(self, List)
     if #sel == 1 and not QDKP2_IsInGuild(sel[1]) then
         menu = {}
         table.insert(menu, { text = "|cFF00FF00" .. sel[1] .. "|r", isTitle = true })
-		table.insert(menu, LogVoices.spacer)
+        table.insert(menu, LogVoices.spacer)
         if self.Sel == "bid" then
             table.insert(menu, LogVoices.SetWinner)
             table.insert(menu, LogVoices.CancelBid)
@@ -2327,7 +1942,7 @@ function myClass.PlayerMenu(self, List)
         local name = self.SelectedPlayers[1]
         menu = {}
         table.insert(menu, { text = "|cFF00FF00" .. name .. "|r", isTitle = true })
-		table.insert(menu, LogVoices.spacer)
+        table.insert(menu, LogVoices.spacer)
         if self.Sel == "bid" then
             table.insert(menu, LogVoices.SetWinner)
             table.insert(menu, LogVoices.CancelBid)
@@ -2339,7 +1954,6 @@ function myClass.PlayerMenu(self, List)
         table.insert(menu, LogVoices.Notify)
         table.insert(menu, LogVoices.spacer)
         
-        -- КНОПКА ИСКЛЮЧЕНИЯ ИЗ ГИЛЬДИИ
         if QDKP2_IsInGuild(name) and name ~= UnitName("player") then
             table.insert(menu, LogVoices.RemoveFromGuildSingle)
         end
@@ -2360,7 +1974,7 @@ function myClass.PlayerMenu(self, List)
         table.insert(menu, LogVoices.spacer)
         
         table.insert(menu, LogVoices.QuickMod)
-		table.insert(menu, LogVoices.MinusQuickMod)		
+        table.insert(menu, LogVoices.MinusQuickMod)        
         table.insert(menu, LogVoices.BonusQuickMod)
         table.insert(menu, LogVoices.MyQuickMod)
         table.insert(menu, LogVoices.MyQuickModTwo)
@@ -2371,7 +1985,7 @@ function myClass.PlayerMenu(self, List)
     elseif #sel > 1 then
         menu = {}
         table.insert(menu, { text = "|cFF00FF00GROUP's actions:|r", isTitle = true })
-		table.insert(menu, LogVoices.spacer)
+        table.insert(menu, LogVoices.spacer)
         if self.Sel == "bid" then
             table.insert(menu, LogVoices.CancelBid)
             table.insert(menu, LogVoices.spacer)
@@ -2381,7 +1995,6 @@ function myClass.PlayerMenu(self, List)
         table.insert(menu, LogVoices.Notify)
         table.insert(menu, LogVoices.spacer)
         
-        -- ИСКЛЮЧЕНИЕ ДЛЯ ГРУППЫ
         local guildPlayersCount = 0
         for _, playerName in ipairs(sel) do
             if QDKP2_IsInGuild(playerName) and playerName ~= UnitName("player") then
@@ -2395,7 +2008,6 @@ function myClass.PlayerMenu(self, List)
             table.insert(menu, { text = "|cFF808080Нет игроков для исключения|r", notClickable = true })
         end
         
-        -- Управление альтами/стендбаем для группы
         if #sel == 2 then
             table.insert(menu, LogVoices.AltMake)
         end
@@ -2406,7 +2018,7 @@ function myClass.PlayerMenu(self, List)
         table.insert(menu, LogVoices.spacer)
         
         table.insert(menu, LogVoices.QuickMod)
-		table.insert(menu, LogVoices.MinusQuickMod)
+        table.insert(menu, LogVoices.MinusQuickMod)
         table.insert(menu, LogVoices.BonusQuickMod)
         table.insert(menu, LogVoices.MyQuickMod)
         table.insert(menu, LogVoices.MyQuickModTwo)
@@ -2460,14 +2072,8 @@ function myClass.RosterMenu(self)
     EasyMenu(menu, self.MenuFrame, "cursor", 0, 0, "MENU")
 end
 
-
 --------------------- SORTING ALGORYTHMS -------------------
 
--- Perform all sorting at once. Values the sorting by category- highest power of 2 is most important.
--- When a new sorting category is used (say, rank), it will be incresed to max (8) and the others will be
--- adjusted downwards accordingly
-
--- Incoming val1, val2 are names.
 local function SortComparitor(val1, val2)
     local compare = 0;
     local test1, test2, increment, invertBuffer
@@ -2544,14 +2150,27 @@ local function SortComparitor(val1, val2)
         compare = compare + increment;
     end
 
-	-- Role (СОРТИРОВКА ПО ПРИОРИТЕТУ)
-    -- Получаем ключи ролей (например "BIS_TANK_HEAL"), а не их названия
-    local roleKey1 = myClass:GetPlayerRole(val1)
-    local roleKey2 = myClass:GetPlayerRole(val2)
+    -- Role (сортировка по приоритету из глобальной системы)
+    local roleKey1 = nil
+    local roleKey2 = nil
+    if QDKP2_GetPlayerDisplayRole then
+        roleKey1 = QDKP2_GetPlayerDisplayRole(val1)
+        roleKey2 = QDKP2_GetPlayerDisplayRole(val2)
+    end
     
-    -- Превращаем ключи в числа приоритета (если роли нет, приоритет 99 - в самом низу)
-    test1 = myClass.RolePriority[roleKey1] or 99
-    test2 = myClass.RolePriority[roleKey2] or 99
+    local rolePriority1 = 99
+    local rolePriority2 = 99
+    if QDKP2_RoleConfig and QDKP2_RoleConfig.DISPLAY then
+        if roleKey1 and QDKP2_RoleConfig.DISPLAY[roleKey1] then
+            rolePriority1 = QDKP2_RoleConfig.DISPLAY[roleKey1].priority
+        end
+        if roleKey2 and QDKP2_RoleConfig.DISPLAY[roleKey2] then
+            rolePriority2 = QDKP2_RoleConfig.DISPLAY[roleKey2].priority
+        end
+    end
+
+    test1 = rolePriority1
+    test2 = rolePriority2
 
     if Reverse.Role then
         invertBuffer = test2;
@@ -2559,7 +2178,6 @@ local function SortComparitor(val1, val2)
         test1 = invertBuffer;
     end
     increment = Values.Role
-    -- Сравниваем числа: чем меньше число, тем выше игрок
     if (test1 < test2) then
         compare = compare - increment;
     elseif (test1 > test2) then
@@ -2661,7 +2279,6 @@ local function SortComparitor(val1, val2)
         end
 
         if myClass.Sel == 'bid' then
-
             local bid1 = QDKP2_BidM_GetBidder(val1) or {}
             local bid2 = QDKP2_BidM_GetBidder(val2) or {}
 
@@ -2715,17 +2332,13 @@ local function SortComparitor(val1, val2)
 end
 
 function myClass.SortList(self, Order, List, forceResort)
-    -- Sorts the list of guild members given by <List> by <OrderToGive>. if Order is nil, will use
-    -- the default in QDKP2_Order, and in that case it won't sort if the order hasn't changed.
-
     List = List or myClass.List
 
     if (not Order) and (myClass.Sort.LastLen == #List) and not (forceResort) then
         return ;
-    end --no need to resort if the sorting or the entriesh haven't changed.
+    end
     local Values = myClass.Sort.Values
 
-    --this manages the inversion when you click 2 times the same sorting button
     if Order and Order == myClass.Sort.Order then
         local InvFlag = QDKP2GUI_Roster.Sort.Reverse[Order]
         if InvFlag then
@@ -2739,7 +2352,6 @@ function myClass.SortList(self, Order, List, forceResort)
     Order = Order or myClass.Sort.Order
     QDKP2_Debug(2, "GUI-Roster", "Sorting by " .. Order)
 
-    -- Fixup valuation of ordering. (which is most important?)
     local lastmax
     if (Order == "Alpha") then
         lastmax = Values.Alpha
@@ -2850,93 +2462,9 @@ function myClass.SortList(self, Order, List, forceResort)
     return List
 end
 
---Changes sort method.
 function myClass.SortBy(self, order)
     QDKP2GUI_Roster:SortList(order)
     QDKP2GUI_Roster:Refresh()
 end
 
 QDKP2GUI_Roster = myClass
-
-------------------------------------------------------------
--- AUTO ROLE SYSTEM (LibGroupTalents)
-------------------------------------------------------------
-
-local function ConvertGTToQDKPRole(gtRole)
-    if gtRole == "tank" then
-        return "TANK"
-    elseif gtRole == "healer" then
-        return "HEAL"
-    else
-        return "DD"
-    end
-end
-
-function myClass.UpdateUnitRole(self, unit)
-    if not unit or not UnitExists(unit) then return end
-
-    local name = UnitName(unit)
-    if not name then return end
-
-    local lib = LibStub:GetLibrary("LibGroupTalents-1.0", true)
-    if not lib then return end
-
-    local gtRole = lib:GetUnitRole(unit)
-    if not gtRole then return end
-
-    -- Сохраняем только автоматическую роль
-    self.PlayerAutoRoles[name] = ConvertGTToQDKPRole(gtRole)
-end
-
-function myClass.GetBonusRole(self, playerName)
-    local autoRole = self.PlayerAutoRoles[playerName]  -- TANK/HEAL/DD
-    local manualRole = self.PlayerManualRoles[playerName]  -- BIS или nil
-    
-    -- Если нет роли, возвращаем nil
-    if not autoRole and not manualRole then
-        return nil
-    end
-    
-    -- Комбинируем роли для бонусной системы
-    if manualRole == "BIS" then
-        if autoRole == "TANK" or autoRole == "HEAL" then
-            return "BIS_TANK_HEAL"  -- БИС Танк или БИС Хил (оба получают один бонус)
-        elseif autoRole == "DD" then
-            return "BIS"  -- БИС Дпс
-        else
-            return "BIS"  -- Если авто роли нет, просто БИС
-        end
-    elseif autoRole == "TANK" or autoRole == "HEAL" then
-        return "TANK_HEAL"  -- Обычный Танк/Хил
-    end
-    
-    return nil  -- Обычный Дпс без бонуса
-end
-
-function myClass.ScanRaidRoles(self)
-    local num = GetNumRaidMembers()
-    for i = 1, num do
-        self:UpdateUnitRole("raid"..i)
-    end
-end
-
-function myClass.InitTalentRoleSystem(self)
-    local lib = LibStub:GetLibrary("LibGroupTalents-1.0", true)
-    if not lib then
-        QDKP2_Debug(1, "Roles", "LibGroupTalents не найден")
-        return
-    end
-
-    lib.RegisterCallback(self, "LibGroupTalents_RoleChange")
-    lib.RegisterCallback(self, "LibGroupTalents_Update")
-end
-
-function myClass:LibGroupTalents_RoleChange(event, guid, unit)
-    self:UpdateUnitRole(unit)
-    self:Refresh()
-end
-
-function myClass:LibGroupTalents_Update(event, guid, unit)
-    self:UpdateUnitRole(unit)
-    self:Refresh()
-end

@@ -1980,7 +1980,7 @@
                     <Anchor relativePoint="RIGHT" point="RIGHT" relativeTo="QDKP2_frame2_title_class"/>
                 </Anchors>
                 <Scripts>
-                    <OnClick>QDKP2GUI_Roster:SortBy(QDKP2_LOC_GUICLASS)</OnClick>
+                    <OnClick>QDKP2GUI_Roster:SortBy("Class")</OnClick>
                 </Scripts>
             </Button>
             <!-- НОВАЯ КНОПКА СОРТИРОВКИ ДЛЯ ЗАМЕТОК -->

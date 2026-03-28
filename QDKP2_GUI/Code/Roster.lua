@@ -134,7 +134,9 @@ function myClass.OnLoad(self)
     self:CreateNonGuildUI()
     self:CreateICCTimerButtons()
     self:CreateNotesButton()
-    
+	
+	-- Установка флага показа оффлайн
+    SetGuildRosterShowOffline(true)
     -- Регистрируем события для сохранения
     self:RegisterEvents()
 	
@@ -541,7 +543,8 @@ function myClass.UpdateLastOnlineData()
 end
 
 function myClass.Show(self)
-    QDKP2_Toggle(2, true)
+    SetGuildRosterShowOffline(true)
+	QDKP2_Toggle(2, true)
     QDKP2GUI_Roster:Refresh()
 end
 
@@ -946,6 +949,7 @@ function myClass.Update(self)
     QDKP2_DownloadGuild()
     QDKP2_UpdateRaid()
     QDKP2_RefreshAll()
+    SetGuildRosterShowOffline(true)
     GuildRoster()
 end
 

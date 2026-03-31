@@ -61,6 +61,6 @@
 - Также вы можете поддержать материально [тут](https://www.donationalerts.com/r/coolsnesh)
 
 <img width="1136" height="406" alt="image" src="https://github.com/user-attachments/assets/4a5efdb5-db30-4a86-a3f3-8cff63bbe595" />
-<img width="832" height="363" alt="image_2026-02-11_15-18-05" src="https://github.com/user-attachments/assets/3a49d3e8-d65d-4059-abcd-5310cb430f82" />
+<img width="1133" height="416" alt="image" src="https://github.com/user-attachments/assets/b1262c90-ae03-4b2b-bb21-c5f89a32313f" />
 <img width="292" height="393" alt="image_2026-02-11_15-41-33" src="https://github.com/user-attachments/assets/b1f268ff-2b8f-4015-ad1c-76e825559660" />
 
